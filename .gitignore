@@ -2,3 +2,6 @@
 */*
 !*/Core
 !*/*.ioc
+!*/*.project
+!*/*.cproject
+!*/*.mxproject
