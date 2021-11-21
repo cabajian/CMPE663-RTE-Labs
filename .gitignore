@@ -1,7 +1,3 @@
 .metadata
-*/*
-!*/Core
-!*/*.ioc
-!*/*.project
-!*/*.cproject
-!*/*.mxproject
+*/Debug
+*/Drivers
