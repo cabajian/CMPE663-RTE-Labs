@@ -1,0 +1,4 @@
+.metadata
+*/*
+!*/Core
+!*/.project
