@@ -22,7 +22,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "stdlib.h"
+#include "string.h"
+#include "stdio.h"
+#include "ctype.h"
+#include "math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,7 +39,7 @@ typedef enum {
 
 typedef struct {
 	WaveType type;
-	uint16_t frequency;
+	int frequency;
 	float logic_min;
 	float logic_max;
 } Wave;
@@ -59,7 +63,9 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-uint16_t wave_buffer[SIZE_MAX];
+uint32_t wave_buffer[WAVE_SIZE_MAX];
+uint8_t str[256];
+int n;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -85,8 +91,7 @@ void wave_gen(Wave* wave);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  uint8_t str[256];
-  int n;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -112,13 +117,13 @@ int main(void)
   MX_TIM2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  n = sprintf(str, "Project 5 - Signal Generator by Chris Abajian (cxa6282@rit.edu)\r\n");
+  n = sprintf((char*) str, "Project 5 - Signal Generator by Chris Abajian (cxa6282@rit.edu)\r\n");
   HAL_UART_Transmit(&huart2, str, n, 100);
-  n = sprintf(str, "Starting a 1KHz square wave from 0.0V - 3.3V\r\n");
+  n = sprintf((char*) str, "Starting a 1KHz square wave from 0.0V - 3.3V\r\n");
   HAL_UART_Transmit(&huart2, str, n, 100);
-  n = sprintf(str, "Command format: \r\n");
+  n = sprintf((char*) str, "Command format: \r\n");
   HAL_UART_Transmit(&huart2, str, n, 100);
-  n = sprintf(str, "  > type freq minv maxv\r\n");
+  n = sprintf((char*) str, "  > type freq minv maxv\r\n");
   HAL_UART_Transmit(&huart2, str, n, 100);
   // Initialize a 1KHz square wave.
   Wave wave = {SQUARE, 1000, LOGIC_MIN, LOGIC_MAX};
@@ -130,22 +135,33 @@ int main(void)
   while (1)
   {
     // Prompt
-    n = sprintf(str, "> ");
+    n = sprintf((char*) str, "> ");
     HAL_UART_Transmit(&huart2, str, n, 100);
 
 	// Wait for incoming command.
+    int i = 0;
     uint8_t cmd[128];
-	while (!cmd[0]) {
-		HAL_UART_Receive(&huart2, cmd, 128, 100);
+	while (1) {
+		uint8_t c;
+		HAL_UART_Receive(&huart2, &c, 1, 1000000);
+		if ((c == '\r') || (c == '\n')) {
+			cmd[i] = 0;
+			n = sprintf((char*) str, "\r\n");
+			HAL_UART_Transmit(&huart2, str, n, 100);
+			break;
+		} else {
+			HAL_UART_Transmit(&huart2, &c, 1, 100);
+			cmd[i++] = c;
+		}
 	}
 
 	// Parse command.
-	int i = 0;
+	i = 0;
 	char* arg = strtok((char*)cmd, " ");
 	while ((arg != NULL) && (i < 4)) {
 		switch (i++) {
 			// Wave type
-			case 0:
+			case 0:;
 				char c = tolower(arg[0]);
 				if (c == 'r') {
 					wave.type = SQUARE;
@@ -156,29 +172,32 @@ int main(void)
 				}
 				break;
 			// Wave frequency
-			case 1:
+			case 1:;
 				int f = atoi(arg);
-				if (f >= WAVE_FREQ_MIN)
+				if ((f >= WAVE_FREQ_MIN) && (f <= WAVE_FREQ_MAX))
 					wave.frequency = f;
 				break;
 			// Wave minimum logic level
-			case 2:
+			case 2:;
 				float min = atof(arg);
-				if ((f >= LOGIC_MIN) && (f < LOGIC_MAX))
+				if ((min >= LOGIC_MIN) && (min < LOGIC_MAX))
 					wave.logic_min = min;
 				break;
 			// Wave maximum logic level
-			case 3:
+			case 3:;
 				float max = atof(arg);
-				if ((f > wave.logic_min) && (f <= LOGIC_MAX))
+				if ((max > wave.logic_min) && (max <= LOGIC_MAX))
 					wave.logic_max = max;
+				break;
 		}
+		arg = strtok(NULL, " ");
 	}
 
 	// Generate the wave.
 	wave_gen(&wave);
 
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -378,49 +397,56 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void wave_gen(Wave* wave) {
 	// Set buffer size to max.
-	int size = SIZE_MAX;
+	int size = WAVE_SIZE_MAX;
 
 	// Calculate DAC sample rate and cap at maximum.
-	float freq = 1.0 / (wave.frequency * size);
+	float freq = wave->frequency * size;
 	if (freq > DAC_FREQ_MAX) {
 		freq = DAC_FREQ_MAX;
-		size = freq / wave.frequency;
+		size = freq / wave->frequency;
 	}
 
-	// Determine the step per point.
-	float step = (wave.logic_max - wave.logic_min) / size;
-
 	// Populate the wave points.
-	wave_buffer[0] = wave.logic_min;
-	for (int i = 1; i < size; i++) {
-		switch (wave.type) {
-			case SQUARE:
-				if (i <= size/2) {
-					wave_buffer[i] = wave.logic_min;
+	float step;
+	for (int i = 0; i < size; i++) {
+		switch (wave->type) {
+			case SQUARE:;
+				if (i < size/2) {
+					wave_buffer[i] = LOGIC_TO_DAC(wave->logic_min);
 				} else {
-					wave_buffer[i] = wave.logic_max;
+					wave_buffer[i] = LOGIC_TO_DAC(wave->logic_max);
 				}
-			case SINE:
-				float step = i * (360.0 / (float)size);
-				wave_buffer[i] = wave.logic_min + (wave.logic_max - wave.logic_min) * sin(step * (M_PI / 180.0));
-			case TRIANGLE:
-				float step = (wave.logic_max - wave.logic_min) / size;
-				if (i <= size/2) {
-					wave_buffer[i] = wave.logic_min + i*step;
+				break;
+			case SINE:;
+				float deg = i * (360.0 / (float)size);
+				float rad = deg * (M_PI / 180.0);
+				float range = (wave->logic_max - wave->logic_min) / 2.0;
+				wave_buffer[i] = LOGIC_TO_DAC(wave->logic_min + range * (sin(rad) + 1));
+				break;
+			case TRIANGLE:;
+				step = (wave->logic_max - wave->logic_min) / (size/2);
+				if (i < size/2) {
+					wave_buffer[i] = LOGIC_TO_DAC(wave->logic_min + (float)i*step);
 				} else {
-					wave_buffer[i] = wave.logic_max - i*step;
+					wave_buffer[i] = LOGIC_TO_DAC(wave->logic_min + (float)(size-i)*step);
 				}
+				break;
 		}
-
 	}
 
 	// Update timer auto-reload period.
     htim2.Instance->ARR = (16000000 / freq) - 1;
 
 	// Start the DAC with DMA transfers.
-	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint16_t*)wave_buffer, size, DAC_ALIGN_12B_R);
+	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, wave_buffer, (uint32_t)size, DAC_ALIGN_12B_R);
 	// Start the timer.
 	HAL_TIM_Base_Start(&htim2);
+
+	// DEBUG: print the buffer.
+	for (int i = 0; i < size; i++) {
+		n = sprintf((char*)str, "%ld,", wave_buffer[i]);
+		HAL_UART_Transmit(&huart2, str, n, 100);
+	}
 }
 /* USER CODE END 4 */
 

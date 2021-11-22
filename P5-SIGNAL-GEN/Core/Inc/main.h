@@ -43,10 +43,14 @@ extern "C" {
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
 #define		WAVE_FREQ_MIN	(10)
+#define		WAVE_FREQ_MAX	(100000)
 #define		DAC_FREQ_MAX	(1000000)
-#define		SIZE_MAX		(1000)
+#define		WAVE_SIZE_MAX	(1000)
 #define		LOGIC_MIN		(0.0f)
 #define		LOGIC_MAX		(3.3f)
+#define		LOGIC_DAC_STEP	(LOGIC_MAX / 4096.0f)
+#define		LOGIC_TO_DAC(x)	(((x) / LOGIC_MAX) * 4095.0f)
+#define		LOGIC_TO_DAC(x)	(((x) / LOGIC_MAX) * 4095.0f)
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
